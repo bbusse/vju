@@ -1,0 +1,21 @@
+[package]
+name = "vju"
+version = "0.1.0"
+authors = ["Björn Busse <bj.rn@baerlin.eu>"]
+license = "MIT OR Apache-2.0"
+edition = "2021"
+rust-version = "1.72"
+publish = false
+
+
+[dependencies]
+clap = { version = "4.5.4", features = ["derive"] }
+egui = "0.27.0"
+eframe = { version = "0.27.0", default-features = false, features = [
+    "default",
+] }
+env_logger = { version = "0.10", default-features = false, features = [
+    "auto-color",
+    "humantime",
+] }
+log = "0.4.19"
