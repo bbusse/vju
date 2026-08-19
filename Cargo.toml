@@ -4,14 +4,17 @@ version = "0.1.0"
 authors = ["Björn Busse <bj.rn@baerlin.eu>"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
-rust-version = "1.72"
+rust-version = "1.90"
 publish = false
+
+[lints.rust]
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(cargo_clippy)'] }
 
 
 [dependencies]
 clap = { version = "4.5.4", features = ["derive"] }
-egui = "0.27.0"
-eframe = { version = "0.27.0", default-features = false, features = [
+egui = "0.35"
+eframe = { version = "0.35", default-features = false, features = [
     "default",
 ] }
 env_logger = { version = "0.10", default-features = false, features = [
@@ -19,3 +22,29 @@ env_logger = { version = "0.10", default-features = false, features = [
     "humantime",
 ] }
 log = "0.4.19"
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.8"
+image = "0.24"
+raw-window-handle = "0.6"
+resvg = { version = "0.47", default-features = false }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.6"
+objc2-app-kit = { version = "0.3", features = ["NSView", "NSWindow", "NSResponder", "NSColor"] }
+objc2-quartz-core = { version = "0.3", features = ["CALayer"] }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+smithay-client-toolkit = { version = "0.20", default-features = false }
+wayland-client = "0.31"
+
+[profile.release]
+# Enable link-time optimization (whole-program optimization)
+lto = true
+# Strip debug symbols to reduce size
+strip = "debuginfo"
+# Reduce codegen units to improve optimization
+codegen-units = 1
+# Panic strategy: abort instead of unwinding (smaller binary)
+panic = "abort"
+# Ensures cleaner builds without leftover artifacts
+incremental = false

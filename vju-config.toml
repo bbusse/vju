@@ -1,0 +1,33 @@
+# Background color (hex format, with or without #)
+background_color = "#5e3169"
+
+# Text/foreground color (hex format)
+text_color = "#e8e8e6"
+
+# Highlight color for selected items (hex format, or omit for transparent)
+highlight_color = "#ffffff"
+
+# Default widget dimensions in pixels
+default_width = 600
+default_height = 500
+
+## Font size
+font_size = 16.0
+
+# Highlight scale multiplier (how much larger selected text appears)
+font_scale_highlight = 1.6
+
+# Use low contrast variant (affects default colors if not explicitly set)
+low_contrast = false
+
+# Path to background image file (supports common formats: PNG, JPEG, etc.)
+# background_image = "/path/to/background.png"
+
+# Enable window transparency (required for window-level rounded corners)
+# Note: Requires compositor support on Linux, works on macOS and Windows
+# transparent = false
+
+# Corner radius for window content in pixels (0 = no rounding)
+# Works best with transparency enabled
+# corner_radius = 12.0
+
