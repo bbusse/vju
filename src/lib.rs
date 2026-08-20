@@ -307,6 +307,149 @@ mod compositor_background {
     }
 }
 
+mod watch {
+    use std::io::{BufRead, BufReader, Read};
+    use std::process::{Command, Stdio};
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+    use std::sync::{Arc, Mutex};
+    use std::thread;
+    use std::time::{Duration, Instant};
+
+    pub fn parse_duration_ms(s: &str) -> Option<u64> {
+        let (num, unit) = if let Some(n) = s.strip_suffix("ms") {
+            (n, "ms")
+        } else if let Some(n) = s.strip_suffix('s') {
+            (n, "s")
+        } else if let Some(n) = s.strip_suffix('m') {
+            (n, "m")
+        } else if let Some(n) = s.strip_suffix('h') {
+            (n, "h")
+        } else {
+            (s.strip_suffix('d')?, "d")
+        };
+        let n: u64 = num.parse().ok()?;
+        match unit {
+            "ms" => Some(n),
+            "s" => n.checked_mul(1_000),
+            "m" => n.checked_mul(60_000),
+            "h" => n.checked_mul(3_600_000),
+            "d" => n.checked_mul(86_400_000),
+            _ => None,
+        }
+    }
+
+    pub struct Handle {
+        pub buffer: Arc<Mutex<Vec<String>>>,
+        pub generation: Arc<AtomicU64>,
+        manual_rerun: Arc<AtomicBool>,
+    }
+
+    impl Handle {
+        pub fn trigger(&self) {
+            self.manual_rerun.store(true, Ordering::SeqCst);
+        }
+    }
+
+    pub fn spawn(argv: Vec<String>, interval_ms: u64, ctx: egui::Context) -> Handle {
+        let buffer = Arc::new(Mutex::new(Vec::new()));
+        let generation = Arc::new(AtomicU64::new(0));
+        let manual_rerun = Arc::new(AtomicBool::new(false));
+
+        let thread_buffer = Arc::clone(&buffer);
+        let thread_generation = Arc::clone(&generation);
+        let thread_manual_rerun = Arc::clone(&manual_rerun);
+        thread::spawn(move || loop {
+            run_once(&argv, &thread_buffer, &thread_generation, &ctx);
+            let start = Instant::now();
+            loop {
+                if thread_manual_rerun.swap(false, Ordering::SeqCst) {
+                    break;
+                }
+                if start.elapsed() >= Duration::from_millis(interval_ms) {
+                    break;
+                }
+                thread::sleep(Duration::from_millis(100));
+            }
+        });
+
+        Handle { buffer, generation, manual_rerun }
+    }
+
+    fn push_line(
+        line: String,
+        buffer: &Arc<Mutex<Vec<String>>>,
+        generation: &Arc<AtomicU64>,
+        ctx: &egui::Context,
+        clear_first: bool,
+    ) {
+        let mut buf = buffer.lock().unwrap();
+        if clear_first {
+            buf.clear();
+        }
+        buf.push(line);
+        drop(buf);
+        generation.fetch_add(1, Ordering::SeqCst);
+        ctx.request_repaint();
+    }
+
+    fn stream_lines<R: Read>(
+        reader: R,
+        buffer: &Arc<Mutex<Vec<String>>>,
+        generation: &Arc<AtomicU64>,
+        ctx: &egui::Context,
+        cleared: &Arc<AtomicBool>,
+    ) {
+        for line in BufReader::new(reader).lines() {
+            let Ok(line) = line else { break };
+            let first_of_run = !cleared.swap(true, Ordering::SeqCst);
+            push_line(line, buffer, generation, ctx, first_of_run);
+        }
+    }
+
+    fn run_once(
+        argv: &[String],
+        buffer: &Arc<Mutex<Vec<String>>>,
+        generation: &Arc<AtomicU64>,
+        ctx: &egui::Context,
+    ) {
+        let mut cmd = Command::new(&argv[0]);
+        if argv.len() > 1 {
+            cmd.args(&argv[1..]);
+        }
+        let mut child = match cmd.stdin(Stdio::null()).stdout(Stdio::piped()).stderr(Stdio::piped()).spawn() {
+            Ok(c) => c,
+            Err(e) => {
+                push_line(format!("error: failed to spawn command '{}': {e}", argv[0]), buffer, generation, ctx, true);
+                return;
+            }
+        };
+
+        let stdout = child.stdout.take();
+        let stderr = child.stderr.take();
+        let cleared = Arc::new(AtomicBool::new(false));
+        let mut handles = Vec::new();
+
+        if let Some(out) = stdout {
+            let b = Arc::clone(buffer);
+            let g = Arc::clone(generation);
+            let c = ctx.clone();
+            let cl = Arc::clone(&cleared);
+            handles.push(thread::spawn(move || stream_lines(out, &b, &g, &c, &cl)));
+        }
+        if let Some(err) = stderr {
+            let b = Arc::clone(buffer);
+            let g = Arc::clone(generation);
+            let c = ctx.clone();
+            let cl = Arc::clone(&cleared);
+            handles.push(thread::spawn(move || stream_lines(err, &b, &g, &c, &cl)));
+        }
+        for h in handles {
+            let _ = h.join();
+        }
+        let _ = child.wait();
+    }
+}
+
 /// Parse a hex color string (e.g. "#ff9900" or "#ff9900ff") to egui::Color32.
 pub fn parse_hex_color(s: &str) -> Option<egui::Color32> {
     let s = s.trim_start_matches('#');
@@ -658,14 +801,21 @@ pub struct Args {
         help = "Render as the desktop background via wlr-layer-shell instead of a normal window (Wayland/wlroots compositors only, e.g. sway, Hyprland, river). Implies --image; takes one image (positional path or stdin). The process keeps running to keep the background surface alive."
     )]
     pub compositor_background: bool,
+    #[arg(
+        long,
+        num_args = 0..=1,
+        default_missing_value = "60s",
+        help = "Re-run the trailing command periodically and display its output like piped stdin (default interval: 60s). Duration units: ms, s, m, h, d (e.g. --watch 5s). Press r to re-run manually."
+    )]
+    pub watch: Option<String>,
     #[arg(long, help = "Path to theme file (TOML format)")]
     pub theme: Option<String>,
     #[arg(long, help = "Show and focus the search input by default")]
     pub show_search: bool,
     #[arg(
         value_name = "IMAGES",
-        help = "Image file paths to view (with --image). Shell-expanded globs work naturally, \
-                e.g. `vju --image *.png`. If none given, reads a single image from stdin."
+        help = "Image file paths to view (with --image), or the command and its arguments to run (with --watch). Shell-expanded globs work naturally, \
+                e.g. `vju --image *.png`. If neither --image nor --watch is given, reads a single image from stdin (with --image)."
     )]
     pub images: Vec<String>,
 }
@@ -738,6 +888,8 @@ struct App {
     // frame. Empty if decoding failed or produced nothing.
     images: Vec<egui::TextureHandle>,
     current_image: usize,
+    watch: Option<watch::Handle>,
+    watch_seen_generation: u64,
 }
 
 impl App {
@@ -785,6 +937,7 @@ impl App {
         show_search_flag: bool,
         return_keys: Option<String>,
         images: Vec<egui::TextureHandle>,
+        watch: Option<watch::Handle>,
     ) -> Self {
         let filtered_items: Vec<usize> = (0..items.len()).collect();
         let mut selected_idx = 0;
@@ -833,6 +986,8 @@ impl App {
                 .map(|s| s.split(',').map(|k| k.trim().to_lowercase()).collect()),
             images,
             current_image: 0,
+            watch,
+            watch_seen_generation: 0,
             request_fullscreen: false,
             highlight_text_color,
         }
@@ -940,6 +1095,16 @@ impl App {
                             self.omit_first_slash = true;
                         }
                     }
+                    egui::Event::Key { key: egui::Key::R, pressed: true, .. } if self.watch.is_some() && !self.show_search => {
+                        if let Some(ref watch) = self.watch {
+                            watch.trigger();
+                        }
+                    }
+                    egui::Event::Text(t) if self.watch.is_some() && !self.show_search && matches!(t.as_str(), "r" | "R") => {
+                        if let Some(ref watch) = self.watch {
+                            watch.trigger();
+                        }
+                    }
                     // --return-keys: exit and emit vju-key-[key] only for specified keys (not in input/search)
                     _ => {
                         if let Some(ref keys) = self.return_keys {
@@ -1007,6 +1172,17 @@ impl App {
     fn update_filtered_items(&mut self) {
         self.filtered_items = filter_indices(&self.items, &self.search_input);
         self.selected = clamp_selected(self.selected, self.filtered_items.len());
+    }
+
+    fn sync_watch(&mut self) {
+        let Some(ref watch) = self.watch else { return };
+        let generation = watch.generation.load(std::sync::atomic::Ordering::SeqCst);
+        if generation == self.watch_seen_generation {
+            return;
+        }
+        self.watch_seen_generation = generation;
+        self.items = watch.buffer.lock().unwrap().clone();
+        self.update_filtered_items();
     }
 
     /// Advances to the next image (image mode), wrapping around at the end. A no-op with 0 or
@@ -1090,6 +1266,7 @@ impl App {
 
 impl eframe::App for App {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
+        self.sync_watch();
         self.process_input(ui.ctx());
         // Apply fullscreen toggle after UI code to avoid deadlock
         if self.request_fullscreen {
@@ -1541,7 +1718,9 @@ pub fn run() -> Result<(), eframe::Error> {
     } else {
         env_logger::init();
     }
-    let (mode, stdin_items, image_inputs): (Mode, Vec<String>, Vec<Vec<u8>>) = if args.image || args.compositor_background {
+    let (mode, stdin_items, image_inputs): (Mode, Vec<String>, Vec<Vec<u8>>) = if args.watch.is_some() {
+        (Mode::View, Vec::new(), Vec::new())
+    } else if args.image || args.compositor_background {
         // Positional file paths (shell-expanded globs work naturally here, e.g.
         // `vju --image *.png`) take precedence; falls back to a single image on stdin.
         let images = if !args.images.is_empty() {
@@ -1599,6 +1778,22 @@ pub fn run() -> Result<(), eframe::Error> {
     } else {
         log::info!("Loaded {} input items (mode={:?})", stdin_items.len(), mode);
     }
+
+    let watch_spec: Option<(Vec<String>, u64)> = if let Some(ref duration_str) = args.watch {
+        if args.images.is_empty() {
+            eprintln!("vju: --watch requires a command to run");
+            std::process::exit(1);
+        }
+        let Some(interval_ms) = watch::parse_duration_ms(duration_str) else {
+            eprintln!(
+                "vju: invalid --watch value '{duration_str}'. Use a number with unit: ms, s, m, h, d (e.g. 60ms, 5s, 2m)"
+            );
+            std::process::exit(1);
+        };
+        Some((args.images.clone(), interval_ms))
+    } else {
+        None
+    };
 
     if args.compositor_background {
         let Some(image_bytes) = image_inputs.first() else {
@@ -1766,6 +1961,7 @@ pub fn run() -> Result<(), eframe::Error> {
                 .collect();
             let show_search_flag = args.show_search;
             let mode_clone = mode.clone();
+            let watch_handle = watch_spec.map(|(argv, interval_ms)| watch::spawn(argv, interval_ms, cc.egui_ctx.clone()));
             Ok(Box::new(App::new(
                 &theme,
                 mode_clone,
@@ -1788,6 +1984,7 @@ pub fn run() -> Result<(), eframe::Error> {
                 show_search_flag,
                 args.return_keys,
                 images,
+                watch_handle,
             )))
         }),
     )
