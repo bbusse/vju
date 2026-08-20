@@ -1,6 +1,6 @@
 [package]
 name = "vju"
-version = "0.1.0"
+version = "1.0.0-rc0"
 authors = ["Björn Busse <bj.rn@baerlin.eu>"]
 license = "MIT OR Apache-2.0"
 edition = "2021"
