@@ -1,7 +1,7 @@
 BIN=target/release/vju
 HASH   := $(shell git rev-parse --short HEAD)
 REMOTE ?= gh
-RELEASE_BRANCH ?= dev
+RELEASE_BRANCH ?= ci
 
 .PHONY: all build strip clean release release-candidate rc _check-remote _check-branch _check-up-to-date
 
