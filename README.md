@@ -1,33 +1,16 @@
 # vju
-A widget for displaying arbitrary text piped in from stdin  
-When used as selection tool it outputs the user choice to stdout
+A window with a vju*
 
 ## Installation
-### Install vju
 ### Install vju from source
 ```
-$ git clone https://github.com/bbusse/vju
-$ cd vju
-$ cargo install --path .
-```
-## Build
-### Build
-```
-$ git clone https://github.com/bbusse/vju
-$ cd vju
-$ cargo build --release
-```
-### Run Build
-```
-$ cargo run --release
+$ cargo install --git clone https://github.com/bbusse/vju
 ```
 ## How
-vju reads from stdin and uses egui to draw the widget containing the received text
+vju reads from stdin and uses egui to draw the widget containing the received input
 
-# TODO
-Search / Filter  
-Input Selection / Choice  
-Scrolling / Paging
+# Random
+*Also known as the swiss spoon of widgets
 
 # Resources
 [egui](https://github.com/emilk/egui)  
