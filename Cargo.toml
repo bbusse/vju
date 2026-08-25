@@ -14,9 +14,7 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(cargo_clippy)'] }
 [dependencies]
 clap = { version = "4.5.4", features = ["derive"] }
 egui = "0.35"
-eframe = { version = "0.35", default-features = false, features = [
-    "default",
-] }
+eframe = { version = "0.35", default-features = false }
 env_logger = { version = "0.10", default-features = false, features = [
     "auto-color",
     "humantime",
@@ -27,6 +25,13 @@ toml = "0.8"
 image = "0.24"
 raw-window-handle = "0.6"
 resvg = { version = "0.47", default-features = false }
+
+# The renderer is picked at build time. wgpu is the default; glow exists for
+# hosts whose software GL stack has no compute shaders, which wgpu requires
+[features]
+default = ["wgpu-renderer"]
+wgpu-renderer = ["eframe/default"]
+glow-renderer = ["eframe/glow", "eframe/default_fonts", "eframe/wayland", "eframe/x11", "eframe/accesskit"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"
