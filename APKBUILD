@@ -1,5 +1,7 @@
 # Maintainer: Björn Busse <bj.rn@baerlin.eu>
 pkgname=vju
+# Placeholder: releases pass their computed version to build-apk.yml, which
+# rewrites this line before abuild runs. Only branch builds ship it as-is
 pkgver=0.1.0
 pkgrel=0
 pkgdesc="A window with a vju"
