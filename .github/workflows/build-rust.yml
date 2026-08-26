@@ -1,0 +1,34 @@
+name: Build Rust Binaries
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: ["**"]
+  workflow_dispatch:
+
+jobs:
+  build-macos-arm64:
+    uses: bbusse/github-workflows/.github/workflows/build-rust.yml@dev
+    with:
+      binary_name: vju
+      artifact_name: vju
+      musl: true
+
+  # Builds the committed APKBUILD, so these artifacts include the vju-glow
+  # subpackage. No version is computed off a tag here, so they carry the
+  # APKBUILD's placeholder pkgver; release.yml passes the real one
+  build-apk:
+    uses: bbusse/github-workflows/.github/workflows/build-apk.yml@dev
+    with:
+      artifact_name: vju
+      build_from_source: true
+      key_name: apk-releases
+    secrets: inherit
+
+  build-gentoo-pkg:
+    uses: bbusse/github-workflows/.github/workflows/build-gentoo-pkg.yml@dev
+    with:
+      overlay_repo: bbusse/bbusse-overlay
+      ebuild_path: x11-misc/vju/vju-0.1.0.ebuild
+      disable: true
