@@ -13,8 +13,8 @@ unexpected_cfgs = { level = "warn", check-cfg = ['cfg(cargo_clippy)'] }
 
 [dependencies]
 clap = { version = "4.5.4", features = ["derive"] }
-egui = "0.35"
-eframe = { version = "0.35", default-features = false }
+egui = "0.36"
+eframe = { version = "0.36", default-features = false }
 env_logger = { version = "0.10", default-features = false, features = [
     "auto-color",
     "humantime",
@@ -31,7 +31,7 @@ resvg = { version = "0.47", default-features = false }
 [features]
 default = ["wgpu-renderer"]
 wgpu-renderer = ["eframe/default"]
-glow-renderer = ["eframe/glow", "eframe/default_fonts", "eframe/wayland", "eframe/x11", "eframe/accesskit"]
+glow-renderer = ["eframe/glow", "eframe/default_fonts", "eframe/wayland", "eframe/accesskit"]
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.6"

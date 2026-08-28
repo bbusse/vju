@@ -35,6 +35,7 @@ package() {
 
 glow() {
 	pkgdesc="$pkgdesc, rendered through glow instead of wgpu"
+	depends="libxkbcommon wayland-libs-client wayland-libs-egl alsa-lib eudev-libs"
 	install -Dm755 "$builddir"/glowtarget/release/vju \
 		"$subpkgdir"/usr/bin/vju-glow
 }
